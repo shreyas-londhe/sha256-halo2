@@ -166,3 +166,51 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
         self.digest_varlen(ctx, input, input_len)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use halo2_base::{
+        gates::RangeInstructions, halo2_proofs::halo2curves::grumpkin::Fq as Fr,
+        utils::testing::base_test, QuantumCell,
+    };
+    use itertools::Itertools;
+    use sha2::{Digest, Sha256};
+
+    use crate::sha256::Sha256Chip;
+
+    #[test]
+    fn test_sha256() {
+        let preimage = b"hello world";
+
+        let mut hasher = Sha256::new();
+        hasher.update(preimage);
+        let result = hasher.finalize();
+
+        base_test()
+            .k(14)
+            .lookup_bits(13)
+            .expect_satisfied(true)
+            .run(|ctx, range| {
+                let preimage_assigned = preimage
+                    .iter()
+                    .map(|byte| QuantumCell::Existing(ctx.load_witness(Fr::from(*byte as u64))))
+                    .collect_vec();
+
+                let result_assinged = result
+                    .iter()
+                    .map(|byte| {
+                        let assigned = ctx.load_witness(Fr::from(*byte as u64));
+                        range.range_check(ctx, assigned, 8);
+                        assigned
+                    })
+                    .collect_vec();
+
+                let sha256_chip = Sha256Chip::new(range);
+                let digest = sha256_chip.digest(ctx, preimage_assigned).unwrap();
+
+                for (assigned, expected) in digest.iter().zip(result_assinged.iter()) {
+                    ctx.constrain_equal(assigned, expected);
+                }
+            })
+    }
+}
