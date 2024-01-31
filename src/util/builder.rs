@@ -7,12 +7,11 @@
 //!
 //! Supports multiple phases.
 
-use halo2_base::{
-    gates::flex_gate::threads::SinglePhaseCoreManager, utils::BigPrimeField, Context,
-};
+use crate::Field;
+use halo2_base::{gates::flex_gate::threads::SinglePhaseCoreManager, Context};
 
 /// Abstracts basic context management for custom circuit builders.
-pub trait CommonCircuitBuilder<F: BigPrimeField> {
+pub trait CommonCircuitBuilder<F: Field> {
     /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
     fn main(&mut self) -> &mut Context<F>;
 
@@ -27,7 +26,7 @@ pub trait CommonCircuitBuilder<F: BigPrimeField> {
     fn new_thread(&mut self) -> &mut Context<F>;
 }
 
-impl<F: BigPrimeField> CommonCircuitBuilder<F> for SinglePhaseCoreManager<F> {
+impl<F: Field> CommonCircuitBuilder<F> for SinglePhaseCoreManager<F> {
     fn main(&mut self) -> &mut Context<F> {
         self.main()
     }

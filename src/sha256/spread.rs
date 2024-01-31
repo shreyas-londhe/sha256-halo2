@@ -1,7 +1,5 @@
 // ! This file is a modified version of the original file from https://github.com/zkemail/halo2-dynamic-sha256 (MIT license)
 
-use std::marker::PhantomData;
-
 use halo2_base::{
     gates::{circuit::BaseCircuitParams, GateInstructions, RangeChip, RangeInstructions},
     halo2_proofs::{
@@ -9,10 +7,11 @@ use halo2_base::{
         plonk::{Advice, Column, ConstraintSystem, Error, TableColumn},
         poly::Rotation,
     },
-    utils::{decompose, BigPrimeField},
+    utils::decompose,
     AssignedValue, Context, QuantumCell,
 };
 use itertools::Itertools;
+use std::marker::PhantomData;
 
 use crate::util::{builder::CommonCircuitBuilder, gates::GateBuilderConfig};
 
@@ -21,9 +20,10 @@ use super::{
     util::{bits_le_to_fe, fe_to_bits_le},
     ShaFlexGateManager,
 };
+use crate::Field;
 
 #[derive(Debug, Clone)]
-pub struct SpreadConfig<F: BigPrimeField> {
+pub struct SpreadConfig<F: Field> {
     pub denses: Vec<Column<Advice>>,
     pub spreads: Vec<Column<Advice>>,
     pub table_dense: TableColumn,
@@ -33,7 +33,7 @@ pub struct SpreadConfig<F: BigPrimeField> {
     _f: PhantomData<F>,
 }
 
-impl<F: BigPrimeField> SpreadConfig<F> {
+impl<F: Field> SpreadConfig<F> {
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         num_bits_lookup: usize,
@@ -77,7 +77,7 @@ impl<F: BigPrimeField> SpreadConfig<F> {
     }
 }
 
-impl<F: BigPrimeField> GateBuilderConfig<F> for SpreadConfig<F> {
+impl<F: Field> GateBuilderConfig<F> for SpreadConfig<F> {
     fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self {
         let lookup_bits = params
             .lookup_bits
@@ -129,12 +129,12 @@ impl<F: BigPrimeField> GateBuilderConfig<F> for SpreadConfig<F> {
 }
 
 #[derive(Debug, Clone)]
-pub struct SpreadChip<'a, F: BigPrimeField> {
+pub struct SpreadChip<'a, F: Field> {
     lookup_bits: usize,
     range: &'a RangeChip<F>,
 }
 
-impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
+impl<'a, F: Field> SpreadChip<'a, F> {
     pub fn new(range: &'a RangeChip<F>, lookup_bits: usize) -> Self {
         debug_assert_eq!(16 % lookup_bits, 0);
 

@@ -1,17 +1,17 @@
+use crate::Field;
 use halo2_base::{
     gates::circuit::BaseCircuitParams,
     halo2_proofs::{
         circuit::{Layouter, Region},
         plonk::{ConstraintSystem, Error},
     },
-    utils::BigPrimeField,
     virtual_region::{
         copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
     },
 };
 
 /// Custom config for a custom gate builder.
-pub trait GateBuilderConfig<F: BigPrimeField>: Clone + Sized {
+pub trait GateBuilderConfig<F: Field>: Clone + Sized {
     fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self;
 
     fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error>;
@@ -20,7 +20,7 @@ pub trait GateBuilderConfig<F: BigPrimeField>: Clone + Sized {
 }
 
 /// Thin abstraction over a gate a `VirtualRegionManager`.
-pub trait CommonGateManager<F: BigPrimeField>: VirtualRegionManager<F> + Clone {
+pub trait CommonGateManager<F: Field>: VirtualRegionManager<F> + Clone {
     type CustomContext<'a>
     where
         Self: 'a;

@@ -6,7 +6,7 @@ use super::builder::ShaCircuitBuilder;
 use super::spread::SpreadChip;
 use super::util::{bits_le_to_fe, fe_to_bits_le};
 use super::ShaFlexGateManager;
-use halo2_base::utils::BigPrimeField;
+use crate::Field;
 use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
     halo2_proofs::plonk::Error,
@@ -40,7 +40,7 @@ pub const INIT_STATE: [u32; NUM_STATE_WORD] = [
 
 pub type SpreadU32<'a, F> = (AssignedValue<F>, AssignedValue<F>);
 
-pub fn sha256_compression<'a, 'b: 'a, F: BigPrimeField>(
+pub fn sha256_compression<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     assigned_input_bytes: &[AssignedValue<F>],
@@ -235,7 +235,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: BigPrimeField>(
     Ok(next_state_words)
 }
 
-fn state_to_spread_u32<'a, F: BigPrimeField>(
+fn state_to_spread_u32<'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &AssignedValue<F>,
@@ -257,7 +257,7 @@ fn state_to_spread_u32<'a, F: BigPrimeField>(
     Ok((lo_spread, hi_spread))
 }
 
-fn mod_u32<'a, 'b: 'a, F: BigPrimeField>(
+fn mod_u32<'a, 'b: 'a, F: Field>(
     ctx: &mut Context<F>,
     range: &impl RangeInstructions<F>,
     x: &AssignedValue<F>,
@@ -278,7 +278,7 @@ fn mod_u32<'a, 'b: 'a, F: BigPrimeField>(
     assigned_lo
 }
 
-fn ch<'a, 'b: 'a, F: BigPrimeField>(
+fn ch<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
@@ -388,7 +388,7 @@ fn ch<'a, 'b: 'a, F: BigPrimeField>(
     Ok(out)
 }
 
-fn maj<'a, 'b: 'a, F: BigPrimeField>(
+fn maj<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
@@ -449,7 +449,7 @@ fn maj<'a, 'b: 'a, F: BigPrimeField>(
     Ok(m)
 }
 
-fn three_add<'a, 'b: 'a, F: BigPrimeField>(
+fn three_add<'a, 'b: 'a, F: Field>(
     ctx: &mut Context<F>,
     gate: &impl GateInstructions<F>,
     x: QuantumCell<F>,
@@ -460,7 +460,7 @@ fn three_add<'a, 'b: 'a, F: BigPrimeField>(
     gate.add(ctx, QuantumCell::Existing(add1), z)
 }
 
-fn sigma_upper0<'a, 'b: 'a, F: BigPrimeField>(
+fn sigma_upper0<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
@@ -485,7 +485,7 @@ fn sigma_upper0<'a, 'b: 'a, F: BigPrimeField>(
     )
 }
 
-fn sigma_upper1<'a, 'b: 'a, F: BigPrimeField>(
+fn sigma_upper1<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
@@ -510,7 +510,7 @@ fn sigma_upper1<'a, 'b: 'a, F: BigPrimeField>(
     )
 }
 
-fn sigma_lower0<'a, 'b: 'a, F: BigPrimeField>(
+fn sigma_lower0<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
@@ -535,7 +535,7 @@ fn sigma_lower0<'a, 'b: 'a, F: BigPrimeField>(
     )
 }
 
-fn sigma_lower1<'a, 'b: 'a, F: BigPrimeField>(
+fn sigma_lower1<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
@@ -561,7 +561,7 @@ fn sigma_lower1<'a, 'b: 'a, F: BigPrimeField>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn sigma_generic<'a, 'b: 'a, F: BigPrimeField>(
+fn sigma_generic<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,

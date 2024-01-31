@@ -7,23 +7,23 @@ use halo2_base::{
         flex_gate::{threads::SinglePhaseCoreManager, MultiPhaseThreadBreakPoints},
         RangeChip,
     },
-    utils::BigPrimeField,
     AssignedValue, Context,
 };
 
 use crate::util::{builder::CommonCircuitBuilder, gates::CommonGateManager};
 
 use super::FIRST_PHASE;
+use crate::Field;
 
 #[derive(Getters)]
-pub struct ShaCircuitBuilder<F: BigPrimeField, ThreadBuilder: CommonGateManager<F>> {
+pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: CommonGateManager<F>> {
     #[getset(get = "pub", get_mut = "pub")]
     pub(crate) sha: ThreadBuilder,
     #[getset(get = "pub", get_mut = "pub")]
     pub(crate) base: BaseCircuitBuilder<F>,
 }
 
-impl<F: BigPrimeField, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManager> {
+impl<F: Field, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManager> {
     pub fn new(witness_gen_only: bool) -> Self {
         let base = BaseCircuitBuilder::new(witness_gen_only);
         Self {
@@ -157,7 +157,7 @@ impl<F: BigPrimeField, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, G
     }
 }
 
-impl<F: BigPrimeField, GateManager: CommonGateManager<F>> CommonCircuitBuilder<F>
+impl<F: Field, GateManager: CommonGateManager<F>> CommonCircuitBuilder<F>
     for ShaCircuitBuilder<F, GateManager>
 {
     fn main(&mut self) -> &mut Context<F> {

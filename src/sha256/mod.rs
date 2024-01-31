@@ -11,7 +11,6 @@ mod util;
 pub use gate::ShaFlexGateManager;
 use halo2_base::gates::RangeChip;
 use halo2_base::halo2_proofs::plonk::Error;
-use halo2_base::utils::BigPrimeField;
 use halo2_base::QuantumCell;
 use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
@@ -26,16 +25,17 @@ use self::builder::ShaCircuitBuilder;
 pub use self::gate::ShaContexts;
 pub(super) use self::gate::FIRST_PHASE;
 pub use self::spread::SpreadChip;
+use crate::Field;
 
 /// [`Sha256Chip`] provides functions to compute SHA256 hash [`SpreadConfig`] gates.
 /// This is version of SHA256 chip is flexible by allowing do distribute advice cells into multiple sets of columns (`dense`, `spread`).
 /// It also heavily benefits from lookup tables (bigger `num_bits_lookup` is better).
 #[derive(Debug, Clone)]
-pub struct Sha256Chip<'a, F: BigPrimeField> {
+pub struct Sha256Chip<'a, F: Field> {
     spread: SpreadChip<'a, F>,
 }
 
-impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
+impl<'a, F: Field> Sha256Chip<'a, F> {
     const BLOCK_SIZE: usize = 64;
     const DIGEST_SIZE: usize = 32;
 
@@ -166,16 +166,16 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
 
     fn digest(
         &self,
-        ctx: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
+        builder: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         input: impl IntoIterator<Item = QuantumCell<F>>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let input = input.into_iter().collect_vec();
         let input_len = input.len();
-        self.digest_varlen(ctx, input, input_len)
+        self.digest_varlen(builder, input, input_len)
     }
 }
 
-impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
+impl<'a, F: Field> Sha256Chip<'a, F> {
     pub fn new(range: &'a RangeChip<F>) -> Self {
         // Spread chip requires 16 % lookup_bits == 0 so we set it to either 8 or 16 based on circuit degree.
         let lookup_bits = if range.lookup_bits() > 8 { 16 } else { 8 };

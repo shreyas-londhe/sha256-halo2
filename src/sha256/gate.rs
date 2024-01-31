@@ -1,7 +1,6 @@
 use getset::CopyGetters;
 use halo2_base::{
     halo2_proofs::circuit::{Region, Value},
-    utils::BigPrimeField,
     virtual_region::{
         copy_constraints::{CopyConstraintManager, SharedCopyConstraintManager},
         manager::VirtualRegionManager,
@@ -13,13 +12,14 @@ use itertools::Itertools;
 use crate::util::gates::{CommonGateManager, GateBuilderConfig};
 
 use super::spread::SpreadConfig;
+use crate::Field;
 
 pub const FIRST_PHASE: usize = 0;
 
 /// `ShaFlexGateManager` keeps track of halo2-lib virtual cells and assigns them to the region corresponding to the `SpreadConfig`.
 /// It also loads of the copy (permutation) constraints between halo2-lib and vanilla cells in Plonk table.
 #[derive(Clone, Debug, Default, CopyGetters)]
-pub struct ShaFlexGateManager<F: BigPrimeField> {
+pub struct ShaFlexGateManager<F: Field> {
     #[getset(get_copy = "pub")]
     witness_gen_only: bool,
     /// The `unknown` flag is used during key generation. If true, during key generation witness [Value]s are replaced with Value::unknown() for safety.
@@ -35,7 +35,7 @@ pub struct ShaFlexGateManager<F: BigPrimeField> {
 
 pub type ShaContexts<'a, F> = (&'a mut Context<F>, &'a mut Context<F>);
 
-impl<F: BigPrimeField> ShaFlexGateManager<F> {
+impl<F: Field> ShaFlexGateManager<F> {
     /// Mutates `self` to use the given copy manager everywhere, including in all threads.
     pub fn set_copy_manager(&mut self, copy_manager: SharedCopyConstraintManager<F>) {
         self.copy_manager = copy_manager.clone();
@@ -72,7 +72,7 @@ impl<F: BigPrimeField> ShaFlexGateManager<F> {
     }
 }
 
-impl<F: BigPrimeField> CommonGateManager<F> for ShaFlexGateManager<F> {
+impl<F: Field> CommonGateManager<F> for ShaFlexGateManager<F> {
     type CustomContext<'a> = ShaContexts<'a, F>;
 
     fn new(witness_gen_only: bool) -> Self {
@@ -109,7 +109,7 @@ impl<F: BigPrimeField> CommonGateManager<F> for ShaFlexGateManager<F> {
     }
 }
 
-impl<F: BigPrimeField> VirtualRegionManager<F> for ShaFlexGateManager<F> {
+impl<F: Field> VirtualRegionManager<F> for ShaFlexGateManager<F> {
     type Config = SpreadConfig<F>;
 
     fn assign_raw(&self, spread: &Self::Config, region: &mut Region<F>) {
@@ -142,7 +142,7 @@ impl<F: BigPrimeField> VirtualRegionManager<F> for ShaFlexGateManager<F> {
 /// Pure advice witness assignment in a single phase. Uses preprocessed `break_points` to determine when
 /// to split a thread into a new column.
 #[allow(clippy::type_complexity)]
-pub fn assign_threads_sha<F: BigPrimeField>(
+pub fn assign_threads_sha<F: Field>(
     threads_dense: &[Context<F>],
     threads_spread: &[Context<F>],
     spread: &SpreadConfig<F>,
