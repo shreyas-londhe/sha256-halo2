@@ -1,12 +1,14 @@
 use halo2_base::{
-    gates::{GateInstructions, RangeChip, RangeInstructions},
+    gates::{ GateInstructions, RangeChip, RangeInstructions },
     halo2_proofs::plonk::Error,
-    utils::{decompose, BigPrimeField},
-    AssignedValue, Context, QuantumCell,
+    utils::{ decompose, BigPrimeField },
+    AssignedValue,
+    Context,
+    QuantumCell,
 };
 use itertools::Itertools;
 
-use super::util::{bits_le_to_fe, fe_to_bits_le};
+use super::util::{ bits_le_to_fe, fe_to_bits_le };
 
 #[derive(Debug, Clone)]
 pub struct SpreadChip<'a, F: BigPrimeField> {
@@ -23,7 +25,7 @@ impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
     pub fn spread(
         &self,
         ctx: &mut Context<F>,
-        dense: &AssignedValue<F>,
+        dense: &AssignedValue<F>
     ) -> Result<AssignedValue<F>, Error> {
         let gate = self.range.gate();
         let limb_bits = self.lookup_bits;
@@ -37,7 +39,7 @@ impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
                     ctx,
                     QuantumCell::Existing(limb),
                     QuantumCell::Constant(F::from(1 << (limb_bits * idx))),
-                    QuantumCell::Existing(limbs_sum),
+                    QuantumCell::Existing(limbs_sum)
                 );
             }
             ctx.constrain_equal(&limbs_sum, dense);
@@ -49,7 +51,7 @@ impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
                 ctx,
                 QuantumCell::Existing(spread_limb),
                 QuantumCell::Constant(F::from(1 << (2 * limb_bits * idx))),
-                QuantumCell::Existing(assigned_spread),
+                QuantumCell::Existing(assigned_spread)
             );
         }
         Ok(assigned_spread)
@@ -58,13 +60,11 @@ impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
     pub fn decompose_even_and_odd_unchecked(
         &self,
         ctx: &mut Context<F>,
-        spread: &AssignedValue<F>,
+        spread: &AssignedValue<F>
     ) -> Result<(AssignedValue<F>, AssignedValue<F>), Error> {
         let bits = fe_to_bits_le(spread.value(), 32);
         let even_bits = (0..bits.len() / 2).map(|idx| bits[2 * idx]).collect_vec();
-        let odd_bits = (0..bits.len() / 2)
-            .map(|idx| bits[2 * idx + 1])
-            .collect_vec();
+        let odd_bits = (0..bits.len() / 2).map(|idx| bits[2 * idx + 1]).collect_vec();
         let (even_val, odd_val) = (bits_le_to_fe(&even_bits), bits_le_to_fe(&odd_bits));
         let even_assigned = ctx.load_witness(even_val);
         let odd_assigned = ctx.load_witness(odd_val);
@@ -76,10 +76,8 @@ impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
     fn spread_limb(
         &self,
         ctx: &mut Context<F>,
-        limb: &AssignedValue<F>,
+        limb: &AssignedValue<F>
     ) -> Result<AssignedValue<F>, Error> {
-        let assigned_dense = ctx.load_witness(*limb.value());
-        ctx.constrain_equal(&assigned_dense, limb);
         let spread_value: F = {
             let val_bits = fe_to_bits_le(limb.value(), 32);
             let mut spread_bits = vec![false; val_bits.len() * 2];
@@ -90,8 +88,8 @@ impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
         };
 
         let assigned_spread = ctx.load_witness(spread_value);
-        let assigned_spread_vanila = ctx.load_witness(*assigned_spread.value());
-        ctx.constrain_equal(&assigned_spread_vanila, &assigned_spread);
+
+        // TODO: constrain the spread value to the limb value.
 
         Ok(assigned_spread)
     }
