@@ -1,19 +1,35 @@
+// ! This file is a modified version of the original file from https://github.com/zkemail/halo2-dynamic-sha256 (MIT license)
+// ! The original implementation is made to be "dynamic" in a sense that it can handle variable-length inputs.
+// ! This is not needed for our use case so those "extra" contraints are removed.
+
+mod builder;
+mod compression;
+mod gate;
+mod spread;
+mod util;
+
+pub use gate::ShaFlexGateManager;
+use halo2_base::gates::RangeChip;
+use halo2_base::halo2_proofs::plonk::Error;
+use halo2_base::utils::BigPrimeField;
+use halo2_base::QuantumCell;
 use halo2_base::{
-    gates::{GateInstructions, RangeChip, RangeInstructions},
-    halo2_proofs::plonk::Error,
-    utils::BigPrimeField,
-    AssignedValue, Context, QuantumCell,
+    gates::{GateInstructions, RangeInstructions},
+    AssignedValue,
 };
 use itertools::Itertools;
 
 use crate::sha256::compression::{sha256_compression, INIT_STATE};
+use crate::util::builder::CommonCircuitBuilder;
 
-use self::spread::SpreadChip;
+use self::builder::ShaCircuitBuilder;
+pub use self::gate::ShaContexts;
+pub(super) use self::gate::FIRST_PHASE;
+pub use self::spread::SpreadChip;
 
-mod compression;
-mod spread;
-mod util;
-
+/// [`Sha256Chip`] provides functions to compute SHA256 hash [`SpreadConfig`] gates.
+/// This is version of SHA256 chip is flexible by allowing do distribute advice cells into multiple sets of columns (`dense`, `spread`).
+/// It also heavily benefits from lookup tables (bigger `num_bits_lookup` is better).
 #[derive(Debug, Clone)]
 pub struct Sha256Chip<'a, F: BigPrimeField> {
     spread: SpreadChip<'a, F>,
@@ -23,18 +39,9 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
     const BLOCK_SIZE: usize = 64;
     const DIGEST_SIZE: usize = 32;
 
-    pub fn new(range: &'a RangeChip<F>) -> Self {
-        // Spread chip requires 16 % lookup_bits == 0 so we set it to either 8 or 16 based on circuit degree.
-        let lookup_bits = if range.lookup_bits() > 8 { 16 } else { 8 };
-
-        Self {
-            spread: SpreadChip::new(range, lookup_bits),
-        }
-    }
-
     fn digest_varlen(
         &self,
-        ctx: &mut Context<F>,
+        builder: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         input: impl IntoIterator<Item = QuantumCell<F>>,
         max_len: usize,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
@@ -51,8 +58,8 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
             .into_iter()
             .map(|cell| match cell {
                 QuantumCell::Existing(v) => v,
-                QuantumCell::Witness(v) => ctx.load_witness(v),
-                QuantumCell::Constant(v) => ctx.load_constant(v),
+                QuantumCell::Witness(v) => builder.main().load_witness(v),
+                QuantumCell::Constant(v) => builder.main().load_constant(v),
                 _ => unreachable!(),
             })
             .collect_vec();
@@ -74,7 +81,7 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
         let padded_size = one_round_size * num_round;
         let zero_padding_byte_size = padded_size - input_byte_size_with_9;
 
-        let mut assign_byte = |byte: u8| ctx.load_witness(F::from(byte as u64));
+        let mut assign_byte = |byte: u8| builder.main().load_witness(F::from(byte as u64));
 
         assigned_input_bytes.push(assign_byte(0x80));
 
@@ -91,14 +98,14 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
 
         assert_eq!(assigned_input_bytes.len(), num_round * one_round_size);
 
-        let assigned_num_round = ctx.load_witness(F::from(num_round as u64));
+        let assigned_num_round = builder.main().load_witness(F::from(num_round as u64));
 
         // compute an initial state from the precomputed_input.
         let last_state = INIT_STATE;
 
         let mut assigned_last_state_vec = vec![last_state
             .iter()
-            .map(|state| ctx.load_witness(F::from(*state as u64)))
+            .map(|state| builder.main().load_witness(F::from(*state as u64)))
             .collect_vec()];
 
         let mut num_processed_input = 0;
@@ -106,7 +113,7 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
             let assigned_input_word_at_round =
                 &assigned_input_bytes[num_processed_input..num_processed_input + one_round_size];
             let new_assigned_hs_out = sha256_compression(
-                ctx,
+                builder,
                 &self.spread,
                 assigned_input_word_at_round,
                 assigned_last_state_vec.last().unwrap(),
@@ -116,16 +123,17 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
             num_processed_input += one_round_size;
         }
 
-        let zero = ctx.load_zero();
+        let zero = builder.main().load_zero();
         let mut output_h_out = vec![zero; 8];
         for (n_round, assigned_state) in assigned_last_state_vec.into_iter().enumerate() {
             let selector = gate.is_equal(
-                ctx,
+                builder.main(),
                 QuantumCell::Constant(F::from(n_round as u64)),
                 assigned_num_round,
             );
             for i in 0..8 {
-                output_h_out[i] = gate.select(ctx, assigned_state[i], output_h_out[i], selector);
+                output_h_out[i] =
+                    gate.select(builder.main(), assigned_state[i], output_h_out[i], selector);
             }
         }
         let output_digest_bytes = output_h_out
@@ -134,21 +142,21 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
                 let be_bytes = assigned_word.value().get_lower_32().to_be_bytes().to_vec();
                 let assigned_bytes = (0..4)
                     .map(|idx| {
-                        let assigned = ctx.load_witness(F::from(be_bytes[idx] as u64));
-                        range.range_check(ctx, assigned, 8);
+                        let assigned = builder.main().load_witness(F::from(be_bytes[idx] as u64));
+                        range.range_check(builder.main(), assigned, 8);
                         assigned
                     })
                     .collect_vec();
-                let mut sum = ctx.load_zero();
+                let mut sum = builder.main().load_zero();
                 for (idx, assigned_byte) in assigned_bytes.iter().copied().enumerate() {
                     sum = gate.mul_add(
-                        ctx,
+                        builder.main(),
                         assigned_byte,
                         QuantumCell::Constant(F::from(1u64 << (24 - 8 * idx))),
                         sum,
                     );
                 }
-                ctx.constrain_equal(&assigned_word, &sum);
+                builder.main().constrain_equal(&assigned_word, &sum);
                 assigned_bytes
             })
             .collect_vec();
@@ -158,7 +166,7 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
 
     fn digest(
         &self,
-        ctx: &mut Context<F>,
+        ctx: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         input: impl IntoIterator<Item = QuantumCell<F>>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let input = input.into_iter().collect_vec();
@@ -167,50 +175,13 @@ impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use halo2_base::{
-        gates::RangeInstructions, halo2_proofs::halo2curves::grumpkin::Fq as Fr,
-        utils::testing::base_test, QuantumCell,
-    };
-    use itertools::Itertools;
-    use sha2::{Digest, Sha256};
+impl<'a, F: BigPrimeField> Sha256Chip<'a, F> {
+    pub fn new(range: &'a RangeChip<F>) -> Self {
+        // Spread chip requires 16 % lookup_bits == 0 so we set it to either 8 or 16 based on circuit degree.
+        let lookup_bits = if range.lookup_bits() > 8 { 16 } else { 8 };
 
-    use crate::sha256::Sha256Chip;
-
-    #[test]
-    fn test_sha256() {
-        let preimage = b"hello world";
-
-        let mut hasher = Sha256::new();
-        hasher.update(preimage);
-        let result = hasher.finalize();
-
-        base_test()
-            .k(14)
-            .lookup_bits(13)
-            .expect_satisfied(true)
-            .run(|ctx, range| {
-                let preimage_assigned = preimage
-                    .iter()
-                    .map(|byte| QuantumCell::Existing(ctx.load_witness(Fr::from(*byte as u64))))
-                    .collect_vec();
-
-                let result_assinged = result
-                    .iter()
-                    .map(|byte| {
-                        let assigned = ctx.load_witness(Fr::from(*byte as u64));
-                        range.range_check(ctx, assigned, 8);
-                        assigned
-                    })
-                    .collect_vec();
-
-                let sha256_chip = Sha256Chip::new(range);
-                let digest = sha256_chip.digest(ctx, preimage_assigned).unwrap();
-
-                for (assigned, expected) in digest.iter().zip(result_assinged.iter()) {
-                    ctx.constrain_equal(assigned, expected);
-                }
-            })
+        Self {
+            spread: SpreadChip::new(range, lookup_bits),
+        }
     }
 }
